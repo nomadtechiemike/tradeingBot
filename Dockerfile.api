@@ -18,6 +18,11 @@ COPY --from=deps /app/apps/api ./apps/api
 COPY package*.json turbo.json tsconfig.json ./
 RUN npm run build
 # (build produced compiled packages in /app/packages/*/dist)
+# Ensure runtime JS shims exist for modules that are type-only in TS so
+# Node ESM imports like './types' resolve to a real file inside dist.
+RUN if [ -d ./packages/core/dist ] && [ ! -f ./packages/core/dist/types.js ]; then echo "export const __types_marker = true;" > ./packages/core/dist/types.js; fi \
+ && if [ -d ./packages/bitkub/dist ] && [ ! -f ./packages/bitkub/dist/types.js ]; then echo "export const __types_marker = true;" > ./packages/bitkub/dist/types.js; fi \
+ && if [ -d ./packages/paper/dist ] && [ ! -f ./packages/paper/dist/types.js ]; then echo "export const __types_marker = true;" > ./packages/paper/dist/types.js; fi
 # Production
 FROM base AS runner
 ENV NODE_ENV=production
