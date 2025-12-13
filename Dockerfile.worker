@@ -19,12 +19,6 @@ COPY package*.json turbo.json tsconfig.json ./
 RUN npm run build
 # (build produced compiled packages in /app/packages/*/dist)
 
-# Ensure runtime JS shims exist for modules that are type-only in TS so
-# Node ESM imports like './types' resolve to a real file inside dist.
-RUN if [ -d ./packages/core/dist ] && [ ! -f ./packages/core/dist/types.js ]; then echo "export const __types_marker = true;" > ./packages/core/dist/types.js; fi \
- && if [ -d ./packages/bitkub/dist ] && [ ! -f ./packages/bitkub/dist/types.js ]; then echo "export const __types_marker = true;" > ./packages/bitkub/dist/types.js; fi \
- && if [ -d ./packages/paper/dist ] && [ ! -f ./packages/paper/dist/types.js ]; then echo "export const __types_marker = true;" > ./packages/paper/dist/types.js; fi
-
 # Production
 FROM base AS runner
 ENV NODE_ENV=production
@@ -52,9 +46,6 @@ COPY --from=builder /app/packages/bitkub/package.json /app/node_modules/@trader-
 COPY --from=builder /app/packages/paper/dist /app/node_modules/@trader-bot/paper/dist
 COPY --from=builder /app/packages/paper/package.json /app/node_modules/@trader-bot/paper/package.json
 
-# Ensure final image definitely contains types shims in both package locations
-RUN mkdir -p /app/packages/core/dist /app/node_modules/@trader-bot/core/dist \
- && [ -f /app/packages/core/dist/types.js ] || echo "export const __types_marker = true;" > /app/packages/core/dist/types.js \
- && [ -f /app/node_modules/@trader-bot/core/dist/types.js ] || echo "export const __types_marker = true;" > /app/node_modules/@trader-bot/core/dist/types.js || true
+# final image will contain files produced by package build/postbuild scripts
 
 CMD ["node", "apps/worker/dist/index.js"]

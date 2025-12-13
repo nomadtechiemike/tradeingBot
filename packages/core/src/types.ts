@@ -97,4 +97,4 @@ export interface DailyStats {
 
 // Runtime marker: ensure this file emits a JS module when compiled so imports
 // like `./types` resolve at runtime in built packages.
-export const __types_marker = true;
+// (removed runtime marker — runtime shims are created in Dockerfiles for production images)
