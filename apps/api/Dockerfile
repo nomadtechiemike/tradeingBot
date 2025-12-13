@@ -10,7 +10,8 @@ COPY apps/api/ ./apps/api/
 # Use `npm install` instead of `npm ci` to avoid failing when a lockfile
 # or workspace resolution is not present in the build context (Portainer).
 RUN set -eux; \
-	npm install --legacy-peer-deps --no-audit --no-fund --loglevel=verbose 2>&1 | tee /tmp/npm-install.log || (echo "npm install failed; showing last 200 lines of log:"; tail -n 200 /tmp/npm-install.log; exit 1); \
+	ENV NODE_OPTIONS=--max-old-space-size=4096
+	npm install --legacy-peer-deps --no-audit --no-fund --no-optional --loglevel=verbose 2>&1 | tee /tmp/npm-install.log || (echo "npm install failed; showing last 200 lines of log:"; tail -n 200 /tmp/npm-install.log; exit 1); \
 	npm run build
 
 ENV NODE_ENV=production
