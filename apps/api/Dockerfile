@@ -7,7 +7,9 @@ COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 
 # Install deps (include dev deps for build) and build packages
-RUN npm ci
+# Use `npm install` instead of `npm ci` to avoid failing when a lockfile
+# or workspace resolution is not present in the build context (Portainer).
+RUN npm install --legacy-peer-deps
 RUN npm run build
 
 ENV NODE_ENV=production
