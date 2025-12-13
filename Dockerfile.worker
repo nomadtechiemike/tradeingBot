@@ -52,4 +52,9 @@ COPY --from=builder /app/packages/bitkub/package.json /app/node_modules/@trader-
 COPY --from=builder /app/packages/paper/dist /app/node_modules/@trader-bot/paper/dist
 COPY --from=builder /app/packages/paper/package.json /app/node_modules/@trader-bot/paper/package.json
 
+# Ensure final image definitely contains types shims in both package locations
+RUN mkdir -p /app/packages/core/dist /app/node_modules/@trader-bot/core/dist \
+ && [ -f /app/packages/core/dist/types.js ] || echo "export const __types_marker = true;" > /app/packages/core/dist/types.js \
+ && [ -f /app/node_modules/@trader-bot/core/dist/types.js ] || echo "export const __types_marker = true;" > /app/node_modules/@trader-bot/core/dist/types.js || true
+
 CMD ["node", "apps/worker/dist/index.js"]
