@@ -17,12 +17,7 @@ COPY --from=deps /app/packages ./packages
 COPY --from=deps /app/apps/worker ./apps/worker
 COPY package*.json turbo.json tsconfig.json ./
 RUN npm run build
-
-# Ensure workspace packages are available under node_modules for runtime imports
-RUN mkdir -p node_modules/@trader-bot \
-	&& cp -R packages/core node_modules/@trader-bot/core \
-	&& cp -R packages/bitkub node_modules/@trader-bot/bitkub \
-	&& cp -R packages/paper node_modules/@trader-bot/paper
+# (build produced compiled packages in /app/packages/*/dist)
 
 # Production
 FROM base AS runner
@@ -33,5 +28,13 @@ COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/worker/dist ./apps/worker/dist
 COPY --from=builder /app/apps/worker/package.json ./apps/worker/
 COPY package*.json ./
+
+# Copy built package dist folders into node_modules so runtime imports resolve
+COPY --from=builder /app/packages/core/dist /app/node_modules/@trader-bot/core/dist
+COPY --from=builder /app/packages/core/package.json /app/node_modules/@trader-bot/core/package.json
+COPY --from=builder /app/packages/bitkub/dist /app/node_modules/@trader-bot/bitkub/dist
+COPY --from=builder /app/packages/bitkub/package.json /app/node_modules/@trader-bot/bitkub/package.json
+COPY --from=builder /app/packages/paper/dist /app/node_modules/@trader-bot/paper/dist
+COPY --from=builder /app/packages/paper/package.json /app/node_modules/@trader-bot/paper/package.json
 
 CMD ["node", "apps/worker/dist/index.js"]
