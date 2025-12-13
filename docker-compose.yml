@@ -14,29 +14,52 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
-    env_file: .env
     depends_on:
       - postgres
     ports:
       - 3000:3000
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/trader_bot
+      - API_HOST=0.0.0.0
+      - API_PORT=3000
+      - API_SECRET_KEY=change-me
+      - AUTH_USERNAME=admin
+      - AUTH_PASSWORD=change-me
+      - TRADING_MODE=PAPER
+      - PAPER_INITIAL_BALANCE_THB=20000
+      - PAPER_FEE_RATE=0.0025
+      - PAPER_SLIPPAGE=0
+      - WORKER_INTERVAL_MS=2000
+      - WORKER_ENABLED=true
+      - LOG_LEVEL=info
     networks:
       - tb-net
   worker:
     build:
       context: .
       dockerfile: Dockerfile.worker
-    env_file: .env
     depends_on:
       - postgres
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/trader_bot
+      - TRADING_MODE=PAPER
+      - PAPER_INITIAL_BALANCE_THB=20000
+      - PAPER_FEE_RATE=0.0025
+      - PAPER_SLIPPAGE=0
+      - WORKER_INTERVAL_MS=2000
+      - WORKER_ENABLED=true
+      - LOG_LEVEL=info
     networks:
       - tb-net
   web:
     build:
       context: .
       dockerfile: Dockerfile.web
-    env_file: .env
     ports:
       - 5173:5173
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=3000
     networks:
       - tb-net
 
