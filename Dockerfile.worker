@@ -18,6 +18,12 @@ COPY --from=deps /app/apps/worker ./apps/worker
 COPY package*.json turbo.json tsconfig.json ./
 RUN npm run build
 
+# Ensure workspace packages are available under node_modules for runtime imports
+RUN mkdir -p node_modules/@trader-bot \
+	&& cp -R packages/core node_modules/@trader-bot/core \
+	&& cp -R packages/bitkub node_modules/@trader-bot/bitkub \
+	&& cp -R packages/paper node_modules/@trader-bot/paper
+
 # Production
 FROM base AS runner
 ENV NODE_ENV=production
