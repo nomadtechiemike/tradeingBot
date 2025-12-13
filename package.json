@@ -1,0 +1,33 @@
+{
+  "name": "trader-bot",
+  "version": "1.0.0",
+  "description": "Single-user crypto trading bot + dashboard",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "db:migrate": "drizzle-kit migrate --config drizzle.config.ts",
+    "db:studio": "drizzle-kit studio --config drizzle.config.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.26",
+    "@types/pg": "^8.16.0",
+    "@typescript-eslint/eslint-plugin": "^6.17.0",
+    "@typescript-eslint/parser": "^6.17.0",
+    "drizzle-kit": "^0.20.18",
+    "eslint": "^8.56.0",
+    "turbo": "^1.10.17",
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.0"
+  }
+}

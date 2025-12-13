@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: trader-bot-db
+    environment:
+      POSTGRES_USER: trader
+      POSTGRES_PASSWORD: trader123
+      POSTGRES_DB: trader_bot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trader"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: trader-bot-api
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://trader:trader123@postgres:5432/trader_bot
+      API_PORT: 3000
+      API_HOST: 0.0.0.0
+      API_SECRET_KEY: ${API_SECRET_KEY}
+      AUTH_USERNAME: ${AUTH_USERNAME}
+      AUTH_PASSWORD: ${AUTH_PASSWORD}
+      TRADING_MODE: ${TRADING_MODE:-PAPER}
+      BITKUB_API_KEY: ${BITKUB_API_KEY}
+      BITKUB_API_SECRET: ${BITKUB_API_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: trader-bot-worker
+    environment:
+      DATABASE_URL: postgresql://trader:trader123@postgres:5432/trader_bot
+      WORKER_INTERVAL_MS: ${WORKER_INTERVAL_MS:-2000}
+      TRADING_MODE: ${TRADING_MODE:-PAPER}
+      PAPER_INITIAL_BALANCE_THB: ${PAPER_INITIAL_BALANCE_THB:-20000}
+      PAPER_FEE_RATE: ${PAPER_FEE_RATE:-0.0025}
+      PAPER_SLIPPAGE: ${PAPER_SLIPPAGE:-0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

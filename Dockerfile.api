@@ -1,0 +1,33 @@
+FROM node:20-alpine AS base
+WORKDIR /app
+
+# Install dependencies
+FROM base AS deps
+COPY package*.json ./
+COPY turbo.json ./
+COPY tsconfig.json ./
+COPY packages/ ./packages/
+COPY apps/api/ ./apps/api/
+RUN npm ci
+
+# Build
+FROM base AS builder
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages ./packages
+COPY --from=deps /app/apps/api ./apps/api
+COPY package*.json turbo.json tsconfig.json ./
+RUN npm run build
+
+# Production
+FROM base AS runner
+ENV NODE_ENV=production
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/api/package.json ./apps/api/
+COPY --from=builder /app/apps/web/dist ./apps/web/dist
+COPY package*.json ./
+
+EXPOSE 3000
+CMD ["node", "apps/api/dist/index.js"]
