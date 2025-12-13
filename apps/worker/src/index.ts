@@ -1,217 +1,106 @@
 import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { Pool } from 'pg';
+import fetch from 'node-fetch';
+import { query as coreQuery } from '@trader-bot/core/dist/db.js';
+import { fetchTicker } from '@trader-bot/bitkub/dist/index.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.join(__dirname, '../../../.env') });
+dotenv.config();
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-import {
-  SettingsService,
-  BalanceService,
-  OrderService,
-  EventService,
-  EquityService,
-  BotStateService
-} from './services.js';
+let running = true;
 
-// @ts-ignore
-import { initializeDatabase, acquireWorkerLock, releaseWorkerLock, StrategyEngine, RiskEngine, MarketSnapshot, Pair, getDatabase } from '@trader-bot/core';
-// @ts-ignore
-import { BitkubClient } from '@trader-bot/bitkub';
+async function getSettings() {
+  const r = await pool.query("SELECT value FROM settings WHERE key='strategy'");
+  return r.rows[0]?.value;
+}
 
-const PAIRS: Pair[] = ['BTC/THB', 'ETH/THB'];
-const WORKER_LOCK_ID = 1;
-const WORKER_INTERVAL_MS = parseInt(process.env.WORKER_INTERVAL_MS || '2000', 10);
+async function getRisk() {
+  const r = await pool.query("SELECT value FROM settings WHERE key='risk'");
+  return r.rows[0]?.value;
+}
 
-let isRunning = true;
-
-async function main() {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    throw new Error('DATABASE_URL not set');
-  }
-
-  // Initialize database
-  await initializeDatabase(databaseUrl);
-  console.log('✓ Database connected');
-
-  // Start worker loop
-  while (isRunning) {
-    const db = getDatabase();
-    const lockAcquired = await acquireWorkerLock(db, WORKER_LOCK_ID);
-
-    if (!lockAcquired) {
-      console.log('Could not acquire lock, skipping cycle...');
-      await sleep(WORKER_INTERVAL_MS);
-      continue;
-    }
-
+async function loop() {
+  const interval = Number(process.env.WORKER_INTERVAL_MS || 2000);
+  while(running) {
     try {
-      await runWorkerCycle();
-      await BotStateService.updatePulse();
-    } catch (error) {
-      console.error('Worker cycle error:', error);
-      await EventService.logEvent('ERROR', `Worker cycle failed: ${error}`, { error });
-    } finally {
-      await releaseWorkerLock(db, WORKER_LOCK_ID);
-      await sleep(WORKER_INTERVAL_MS);
+      const settings = await getSettings();
+      const risk = await getRisk();
+      for (const pair of ['BTC/THB','ETH/THB']) {
+        const ticker = await fetchTicker(pair);
+        const s = settings[pair];
+        if (!s || !s.enabled) continue;
+        // simple strategy: if last <= buyTrigger -> place buy
+        const last = ticker.last;
+        // check existing open orders
+        const openRes = await pool.query('SELECT sum(quantity*price) as exposure FROM orders WHERE pair=$1 AND status=$2', [pair,'OPEN']);
+        const exposure = Number(openRes.rows[0]?.exposure||0);
+        if (last <= s.buyTrigger && exposure < (risk.maxExposureTHBPerPair||50000)) {
+          // place limit buy at last price
+          await pool.query('INSERT INTO orders(mode,pair,side,price,quantity,status) VALUES($1,$2,$3,$4,$5,$6)', ['PAPER',pair,'BUY',last, (s.orderSizeTHB/last), 'OPEN']);
+          await pool.query('INSERT INTO bot_events(level,message) VALUES($1,$2)', ['INFO', `Placed BUY ${pair} @ ${last}`]);
+        }
+        // check holdings
+        const bal = await pool.query('SELECT btc,eth FROM balances ORDER BY id DESC LIMIT 1');
+        const holdings = bal.rows[0] || { btc:0, eth:0 };
+        const assetQty = pair.startsWith('BTC')? Number(holdings.btc):Number(holdings.eth);
+        if (assetQty>0 && last >= s.sellTrigger) {
+          await pool.query('INSERT INTO orders(mode,pair,side,price,quantity,status) VALUES($1,$2,$3,$4,$5,$6)', ['PAPER',pair,'SELL',last, assetQty, 'OPEN']);
+          await pool.query('INSERT INTO bot_events(level,message) VALUES($1,$2)', ['INFO', `Placed SELL ${pair} @ ${last}`]);
+        }
+        // attempt to fill open orders (naive)
+        const opens = await pool.query('SELECT * FROM orders WHERE pair=$1 AND status=$2', [pair,'OPEN']);
+        for (const o of opens.rows) {
+          if (o.side==='BUY') {
+            if (ticker.bestAsk <= Number(o.price)) {
+              // fill
+              await pool.query('INSERT INTO fills(order_id,price,quantity,fee) VALUES($1,$2,$3,$4)', [o.id, o.price, o.quantity, Number(process.env.PAPER_FEE_RATE || 0.0025) * o.price * o.quantity]);
+              await pool.query('UPDATE orders SET status=$1 WHERE id=$2', ['FILLED', o.id]);
+              // update balances (very simple)
+              const b = await pool.query('SELECT * FROM balances ORDER BY id DESC LIMIT 1');
+              const cur = b.rows[0];
+              const thb = Number(cur.thb) - Number(o.price)*Number(o.quantity);
+              const btc = Number(cur.btc) + Number(o.quantity);
+              await pool.query('INSERT INTO balances(mode,thb,btc,eth) VALUES($1,$2,$3,$4)', ['PAPER', thb, btc, cur.eth]);
+            }
+          } else {
+            if (ticker.bestBid >= Number(o.price)) {
+              await pool.query('INSERT INTO fills(order_id,price,quantity,fee) VALUES($1,$2,$3,$4)', [o.id, o.price, o.quantity, Number(process.env.PAPER_FEE_RATE || 0.0025) * o.price * o.quantity]);
+              await pool.query('UPDATE orders SET status=$1 WHERE id=$2', ['FILLED', o.id]);
+              const b = await pool.query('SELECT * FROM balances ORDER BY id DESC LIMIT 1');
+              const cur = b.rows[0];
+              const thb = Number(cur.thb) + Number(o.price)*Number(o.quantity);
+              const eth = cur.eth;
+              const btc = cur.btc - (pair.startsWith('BTC')? Number(o.quantity):0);
+              const newbtc = btc;
+              await pool.query('INSERT INTO balances(mode,thb,btc,eth) VALUES($1,$2,$3,$4)', ['PAPER', thb, newbtc, eth]);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('worker error', err);
     }
+    await new Promise(r=>setTimeout(r, interval));
   }
 }
 
-async function runWorkerCycle() {
-  const botState = await BotStateService.getState();
-
-  // Skip if paused or kill switch is enabled
-  if (botState.isPaused || botState.killSwitch) {
-    return;
-  }
-
-  // Get settings
-  const strategySettings = await SettingsService.getStrategySettings();
-  const riskLimits = await SettingsService.getRiskLimits();
-  const tradingMode = await SettingsService.getTradingMode();
-  const feeRate = await SettingsService.getFeeRate();
-  const slippage = await SettingsService.getSlippage();
-
-  // Get current balances
-  const balances = await BalanceService.getBalance(tradingMode);
-  const openOrders = await OrderService.getOpenOrders(tradingMode);
-
-  // Create paper wallet
-  // @ts-ignore
-  const { PaperWallet } = await import('@trader-bot/paper');
-  const wallet = new (PaperWallet as any)(balances, feeRate, slippage);
-
-  // Fetch market data
-  const bitkubClient = new BitkubClient();
-  const snapshots = new Map<Pair, MarketSnapshot>();
-
-  for (const pair of PAIRS) {
-    const ticker = await bitkubClient.getPublic().getTicker(pair);
-    if (!ticker) {
-      await EventService.logEvent('WARN', `Could not fetch ticker for ${pair}`);
-      continue;
+(async ()=>{
+  // run migrations then start
+  const fs = await import('fs');
+  const path = await import('path');
+  const client = await pool.connect();
+  try {
+    const migrationsDir = path.join(process.cwd(),'migrations');
+    if (fs.existsSync(migrationsDir)) {
+      const files = fs.readdirSync(migrationsDir).filter(f=>f.endsWith('.sql')).sort();
+      for (const f of files) {
+        const sql = fs.readFileSync(path.join(migrationsDir,f),'utf8');
+        await client.query(sql);
+      }
     }
-
-    snapshots.set(pair, {
-      pair,
-      lastPrice: ticker.last,
-      bestBid: ticker.highestBid,
-      bestAsk: ticker.lowestAsk,
-      high24h: ticker.high24hr,
-      low24h: ticker.low24hr,
-      volume24h: ticker.quoteVolume,
-      change24h: ticker.percentChange,
-      timestamp: Date.now()
-    });
+  } finally {
+    client.release();
   }
-
-  // Get current day's PnL for risk checks
-  const dailyPnL = await EquityService.getDailyPnL(tradingMode, new Date());
-
-  // Process each pair
-  for (const pair of PAIRS) {
-    const snapshot = snapshots.get(pair);
-    if (!snapshot) continue;
-
-    const pairSettings = pair === 'BTC/THB' ? strategySettings.btc : strategySettings.eth;
-
-    // Generate signal
-    const signal = StrategyEngine.evaluateSignals(snapshot, pairSettings, openOrders);
-
-    if (!signal || signal.action === 'HOLD') {
-      continue;
-    }
-
-    // Check risk limits
-    const quantity = StrategyEngine.calculateQuantity(pairSettings.orderSizeTHB, snapshot.lastPrice);
-    const riskCheck = RiskEngine.checkOrderAllowed(
-      signal.action as 'BUY' | 'SELL',
-      pair,
-      quantity,
-      snapshot.lastPrice,
-      balances,
-      openOrders,
-      riskLimits,
-      botState.killSwitch,
-      dailyPnL
-    );
-
-    if (!riskCheck.allowed) {
-      await EventService.logEvent('WARN', `Order blocked: ${pair} ${signal.action} - ${riskCheck.reason}`, {
-        pair,
-        action: signal.action,
-        reason: riskCheck.reason
-      });
-      continue;
-    }
-
-    // Place order
-    const order = await OrderService.createOrder(tradingMode, pair, signal.action, snapshot.lastPrice, quantity);
-    await EventService.logEvent('INFO', `Order placed: ${pair} ${signal.action} @ ${snapshot.lastPrice}`, {
-      orderId: order.id,
-      pair,
-      side: signal.action,
-      price: snapshot.lastPrice,
-      quantity
-    });
-
-    // Simulate fill
-    const fillResult = wallet.simulateFill(order, snapshot.bestBid, snapshot.bestAsk, snapshot.lastPrice);
-
-    if (fillResult.filled) {
-      wallet.updateBalancesOnFill(order, fillResult.quantity, fillResult.price, fillResult.fee);
-      await OrderService.recordFill(order.id, fillResult.quantity, fillResult.price, fillResult.fee);
-      await OrderService.updateOrderFill(order.id, 'FILLED', fillResult.quantity, fillResult.price, fillResult.fee);
-      await BalanceService.updateBalance(tradingMode, wallet.getBalances());
-
-      await EventService.logEvent('INFO', `Order filled: ${pair} ${signal.action} @ ${fillResult.price}`, {
-        orderId: order.id,
-        pair,
-        side: signal.action,
-        price: fillResult.price,
-        quantity: fillResult.quantity,
-        fee: fillResult.fee
-      });
-    } else {
-      await EventService.logEvent('DEBUG', fillResult.reason, { orderId: order.id });
-    }
-  }
-
-  // Record equity snapshot
-  const btcSnapshot = snapshots.get('BTC/THB');
-  const ethSnapshot = snapshots.get('ETH/THB');
-
-  if (btcSnapshot && ethSnapshot) {
-    const portfolioValue = wallet.calculatePortfolioValue(btcSnapshot.lastPrice, ethSnapshot.lastPrice);
-    await EquityService.recordSnapshot(tradingMode, portfolioValue, wallet.getBalances(), btcSnapshot.lastPrice, ethSnapshot.lastPrice);
-  }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// Handle graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  isRunning = false;
-  setTimeout(() => {
-    process.exit(0);
-  }, 5000);
-});
-
-process.on('SIGINT', async () => {
-  console.log('SIGINT received, shutting down gracefully...');
-  isRunning = false;
-  setTimeout(() => {
-    process.exit(0);
-  }, 5000);
-});
-
-main().catch((error) => {
-  console.error('Fatal error:', error);
-  process.exit(1);
-});
+  console.log('starting worker loop');
+  loop();
+})();

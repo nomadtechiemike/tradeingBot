@@ -1,0 +1,6 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+*{box-sizing:border-box}
+html,body,#app{height:100%}
+body{font-family:Inter,system-ui,Segoe UI,Roboto;background:#0f1720;color:#e6eef6}
+.app{padding:20px}
+.card{background:#071226;padding:16px;border-radius:8px;margin-bottom:12px}

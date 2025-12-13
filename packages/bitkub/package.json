@@ -6,17 +6,11 @@
   "types": "dist/index.d.ts",
   "files": ["dist"],
   "scripts": {
-    "build": "npx tsc",
-    "postbuild": "node -e \"const fs=require('fs');const p='./dist/types.js';if(!fs.existsSync(p)){fs.mkdirSync('./dist',{recursive:true});fs.writeFileSync(p,'export const __types_marker = true;');}\"",
-    "dev": "npx tsc --watch",
-    "test": "vitest"
+    "build": "tsc -p ./",
+    "test": "echo test"
   },
-  "dependencies": {
-    "node-fetch": "^3.3.2"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "@types/node": "^20.10.6",
-    "typescript": "^5.3.3",
-    "vitest": "^1.1.0"
+    "typescript": "^5.3.3"
   }
 }

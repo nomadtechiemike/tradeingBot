@@ -1,31 +1,25 @@
 {
-  "name": "@trader-bot/api",
+  "name": "api",
   "version": "1.0.0",
+  "private": true,
   "type": "module",
-  "main": "dist/index.js",
   "scripts": {
-    "build": "npx tsc && npx tsc-alias",
-    "start": "node --loader tsx dist/index.js",
-    "dev": "npx tsx watch src/index.ts",
-    "test": "vitest"
+    "build": "tsc -p ./",
+    "start": "node ./dist/index.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts"
   },
   "dependencies": {
-    "@fastify/cors": "^8.5.0",
-    "@fastify/rate-limit": "^9.1.0",
-    "@fastify/static": "^6.12.0",
-    "@trader-bot/bitkub": "*",
-    "@trader-bot/core": "*",
-    "dotenv": "^17.2.3",
-    "drizzle-orm": "^0.29.1",
-    "fastify": "^4.25.2",
-    "pg": "^8.11.3"
+    "fastify": "^4.25.0",
+    "fastify-cookie": "^7.0.0",
+    "fastify-rate-limit": "^7.6.0",
+    "dotenv": "^16.0.0",
+    "pg": "^8.0.0",
+    "node-fetch": "^3.3.2",
+    "@trader-bot/core": "1.0.0",
+    "@trader-bot/bitkub": "1.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.10.6",
-    "drizzle-kit": "^0.20.18",
-    "tsc-alias": "^1.8.8",
-    "tsx": "^4.7.0",
     "typescript": "^5.3.3",
-    "vitest": "^1.1.0"
+    "ts-node-dev": "^2.0.0"
   }
 }

@@ -1,35 +1,48 @@
 version: '3.8'
-
 services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: trader_bot
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - tb-net
   api:
     build:
       context: .
       dockerfile: Dockerfile.api
-    container_name: trader-bot-api
+    env_file: .env
+    depends_on:
+      - postgres
     ports:
-      - "3001:3001"
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@host.docker.internal:5432/trader_bot
-      API_PORT: 3001
-      API_HOST: 0.0.0.0
-      API_SECRET_KEY: ${API_SECRET_KEY}
-      AUTH_USERNAME: ${AUTH_USERNAME}
-      AUTH_PASSWORD: ${AUTH_PASSWORD}
-      TRADING_MODE: ${TRADING_MODE:-PAPER}
-      BITKUB_API_KEY: ${BITKUB_API_KEY}
-      BITKUB_API_SECRET: ${BITKUB_API_SECRET}
-    restart: unless-stopped
-
+      - 3000:3000
+    networks:
+      - tb-net
   worker:
     build:
       context: .
       dockerfile: Dockerfile.worker
-    container_name: trader-bot-worker
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@host.docker.internal:5432/trader_bot
-      WORKER_INTERVAL_MS: ${WORKER_INTERVAL_MS:-2000}
-      TRADING_MODE: ${TRADING_MODE:-PAPER}
-      PAPER_INITIAL_BALANCE_THB: ${PAPER_INITIAL_BALANCE_THB:-20000}
-      PAPER_FEE_RATE: ${PAPER_FEE_RATE:-0.0025}
-      PAPER_SLIPPAGE: ${PAPER_SLIPPAGE:-0}
-    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      - postgres
+    networks:
+      - tb-net
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    env_file: .env
+    ports:
+      - 5173:5173
+    networks:
+      - tb-net
+
+volumes:
+  pgdata:
+
+networks:
+  tb-net:
+    driver: bridge
