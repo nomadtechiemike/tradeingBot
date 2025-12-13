@@ -7,10 +7,9 @@ COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 
 # Install deps (include dev deps for build) and build packages
-# Use `npm install` instead of `npm ci` to avoid failing when a lockfile
-# or workspace resolution is not present in the build context (Portainer).
+# Increase Node heap for install and avoid optional packages
+ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN set -eux; \
-	ENV NODE_OPTIONS=--max-old-space-size=4096
 	npm install --legacy-peer-deps --no-audit --no-fund --no-optional --loglevel=verbose 2>&1 | tee /tmp/npm-install.log || (echo "npm install failed; showing last 200 lines of log:"; tail -n 200 /tmp/npm-install.log; exit 1); \
 	npm run build
 
