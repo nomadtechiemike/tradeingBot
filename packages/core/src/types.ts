@@ -94,3 +94,7 @@ export interface DailyStats {
   winCount: number;
   lossCount: number;
 }
+
+// Runtime marker: ensure this file emits a JS module when compiled so imports
+// like `./types` resolve at runtime in built packages.
+export const __types_marker = true;
