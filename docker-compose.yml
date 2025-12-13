@@ -12,8 +12,8 @@ services:
       - tb-net
   api:
     build:
-      context: ./apps/api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/api/Dockerfile
     depends_on:
       - postgres
     ports:
@@ -36,8 +36,8 @@ services:
       - tb-net
   worker:
     build:
-      context: ./apps/worker
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/worker/Dockerfile
     depends_on:
       - postgres
     environment:
@@ -53,8 +53,8 @@ services:
       - tb-net
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/web/Dockerfile
     ports:
       - 5173:5173
     environment:
