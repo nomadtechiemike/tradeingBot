@@ -18,6 +18,12 @@ COPY --from=deps /app/apps/worker ./apps/worker
 COPY package*.json turbo.json tsconfig.json ./
 RUN npm run build
 # (build produced compiled packages in /app/packages/*/dist)
+# Ensure builder stage has types shims for any packages that emitted only .d.ts
+RUN for pkg in core bitkub paper; do \
+	if [ -d ./packages/$pkg/dist ] && [ ! -f ./packages/$pkg/dist/types.js ]; then \
+		echo "export const __types_marker = true;" > ./packages/$pkg/dist/types.js; \
+	fi; \
+done
 
 # Production
 FROM base AS runner
