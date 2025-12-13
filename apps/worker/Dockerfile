@@ -7,10 +7,9 @@ COPY packages/ ./packages/
 COPY apps/worker/ ./apps/worker/
 
 # Install deps (include dev deps for build) and build packages
-RUN npm install --legacy-peer-deps
-# Use `npm install` instead of `npm ci` so Docker/Portainer builds don't fail
-# when package-lock or workspace lock state isn't available in the build context.
-RUN npm run build
+RUN set -eux; \
+	npm install --legacy-peer-deps --no-audit --no-fund --loglevel=verbose 2>&1 | tee /tmp/npm-install.log || (echo "npm install failed; showing last 200 lines of log:"; tail -n 200 /tmp/npm-install.log; exit 1); \
+	npm run build
 
 ENV NODE_ENV=production
 
