@@ -28,6 +28,14 @@ COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/package.json ./apps/api/
 COPY package*.json ./
 
+# Ensure runtime ESM resolution by placing built package dist and package.json
+# under node_modules/@trader-bot so imports like @trader-bot/core resolve.
+COPY --from=builder /app/packages/core/dist /app/node_modules/@trader-bot/core/dist
+COPY --from=builder /app/packages/core/package.json /app/node_modules/@trader-bot/core/package.json
+COPY --from=builder /app/packages/bitkub/dist /app/node_modules/@trader-bot/bitkub/dist
+COPY --from=builder /app/packages/bitkub/package.json /app/node_modules/@trader-bot/bitkub/package.json
+COPY --from=builder /app/packages/paper/dist /app/node_modules/@trader-bot/paper/dist
+COPY --from=builder /app/packages/paper/package.json /app/node_modules/@trader-bot/paper/package.json
 # Copy built package dist folders into node_modules so runtime imports resolve
 COPY --from=builder /app/packages/core/dist /app/node_modules/@trader-bot/core/dist
 COPY --from=builder /app/packages/core/package.json /app/node_modules/@trader-bot/core/package.json
