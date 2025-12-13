@@ -1,3 +1,19 @@
+FROM node:20-bullseye-slim
+WORKDIR /app
+
+# Copy manifest and source for build
+COPY package*.json turbo.json tsconfig.json ./
+COPY packages/ ./packages/
+COPY apps/worker/ ./apps/worker/
+
+# Install deps (include dev deps for build) and build packages
+RUN npm ci
+RUN npm run build
+
+ENV NODE_ENV=production
+
+# Run the built worker
+CMD ["node", "apps/worker/dist/index.js"]
 FROM node:20-alpine AS base
 WORKDIR /app
 
@@ -52,6 +68,9 @@ COPY --from=builder /app/packages/bitkub/package.json /app/node_modules/@trader-
 COPY --from=builder /app/packages/paper/dist /app/node_modules/@trader-bot/paper/dist
 COPY --from=builder /app/packages/paper/package.json /app/node_modules/@trader-bot/paper/package.json
 
-# final image will contain files produced by package build/postbuild scripts
+RUN mkdir -p /app/node_modules/@trader-bot \
+ && for d in /app/packages/*; do \
+			if [ -d "$d" ]; then name=$(basename "$d"); rm -rf "/app/node_modules/@trader-bot/$name" || true; cp -a "$d" "/app/node_modules/@trader-bot/$name" || true; fi; \
+		done
 
 CMD ["node", "apps/worker/dist/index.js"]
