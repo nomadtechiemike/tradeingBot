@@ -10,8 +10,7 @@ COPY migrations/ ./migrations/
 # then build packages and the API, copy built package outputs into
 # local node_modules, and install only production deps for the API.
 RUN npm install --no-audit --no-fund typescript@5.3.3 --no-optional
-RUN cd packages/core && npm install --no-audit --no-fund --no-optional --no-save
-RUN cd packages/bitkub && npm install --no-audit --no-fund --no-optional --no-save
+RUN npm install --no-audit --no-fund --no-optional --no-save pg@^8.0.0 dotenv@^16.0.0 node-fetch@^3.3.2
 RUN npx tsc -p packages/core
 RUN npx tsc -p packages/bitkub
 RUN npx tsc -p apps/api
