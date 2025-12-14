@@ -10,9 +10,11 @@ COPY migrations/ ./migrations/
 # then build packages and the API, copy built package outputs into
 # local node_modules, and install only production deps for the API.
 RUN npm install --no-audit --no-fund typescript@5.3.3 --no-optional
-RUN npx tsc -p packages/core || (echo "TypeScript error in core:" && npx tsc -p packages/core 2>&1 && exit 1)
-RUN npx tsc -p packages/bitkub || (echo "TypeScript error in bitkub:" && npx tsc -p packages/bitkub 2>&1 && exit 1)
-RUN npx tsc -p apps/api || (echo "TypeScript error in api:" && npx tsc -p apps/api 2>&1 && exit 1)
+RUN cd packages/core && npm install --no-audit --no-fund --no-optional --no-save
+RUN cd packages/bitkub && npm install --no-audit --no-fund --no-optional --no-save
+RUN npx tsc -p packages/core
+RUN npx tsc -p packages/bitkub
+RUN npx tsc -p apps/api
 RUN mkdir -p node_modules/@trader-bot/core node_modules/@trader-bot/bitkub
 RUN cp packages/core/package.json node_modules/@trader-bot/core/
 RUN cp -r packages/core/dist/. node_modules/@trader-bot/core/

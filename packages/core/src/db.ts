@@ -1,8 +1,14 @@
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
+
 dotenv.config();
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL || '' });
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error('DATABASE_URL environment variable is required');
+}
+
+const pool = new Pool({ connectionString });
 
 export async function query(text: string, params?: any[]) {
   const res = await pool.query(text, params);
