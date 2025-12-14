@@ -1,11 +1,15 @@
 import dotenv from 'dotenv';
 import { Pool } from 'pg';
 import fetch from 'node-fetch';
-import { query as coreQuery } from '@trader-bot/core/dist/db.js';
-import { fetchTicker } from '@trader-bot/bitkub/dist/index.js';
+import { query as coreQuery } from '@trader-bot/core';
+import { fetchTicker } from '@trader-bot/bitkub';
 
 dotenv.config();
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+// #region agent log
+fetch('http://127.0.0.1:7242/ingest/72a915f4-fce9-4fec-86e0-24d9a811a6e8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apps/worker/src/index.ts:9',message:'Worker imports successful',data:{hasCoreQuery:typeof coreQuery==='function',hasFetchTicker:typeof fetchTicker==='function'},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+// #endregion
 
 let running = true;
 
@@ -55,12 +59,14 @@ async function loop() {
               // fill
               await pool.query('INSERT INTO fills(order_id,price,quantity,fee) VALUES($1,$2,$3,$4)', [o.id, o.price, o.quantity, Number(process.env.PAPER_FEE_RATE || 0.0025) * o.price * o.quantity]);
               await pool.query('UPDATE orders SET status=$1 WHERE id=$2', ['FILLED', o.id]);
-              // update balances (very simple)
+              // update balances
               const b = await pool.query('SELECT * FROM balances ORDER BY id DESC LIMIT 1');
               const cur = b.rows[0];
               const thb = Number(cur.thb) - Number(o.price)*Number(o.quantity);
-              const btc = Number(cur.btc) + Number(o.quantity);
-              await pool.query('INSERT INTO balances(mode,thb,btc,eth) VALUES($1,$2,$3,$4)', ['PAPER', thb, btc, cur.eth]);
+              const isBTC = o.pair.startsWith('BTC');
+              const newBtc = isBTC ? Number(cur.btc) + Number(o.quantity) : Number(cur.btc);
+              const newEth = isBTC ? Number(cur.eth) : Number(cur.eth) + Number(o.quantity);
+              await pool.query('INSERT INTO balances(mode,thb,btc,eth) VALUES($1,$2,$3,$4)', ['PAPER', thb, newBtc, newEth]);
             }
           } else {
             if (ticker.bestBid >= Number(o.price)) {
@@ -69,10 +75,10 @@ async function loop() {
               const b = await pool.query('SELECT * FROM balances ORDER BY id DESC LIMIT 1');
               const cur = b.rows[0];
               const thb = Number(cur.thb) + Number(o.price)*Number(o.quantity);
-              const eth = cur.eth;
-              const btc = cur.btc - (pair.startsWith('BTC')? Number(o.quantity):0);
-              const newbtc = btc;
-              await pool.query('INSERT INTO balances(mode,thb,btc,eth) VALUES($1,$2,$3,$4)', ['PAPER', thb, newbtc, eth]);
+              const isBTC = o.pair.startsWith('BTC');
+              const newBtc = isBTC ? Number(cur.btc) - Number(o.quantity) : Number(cur.btc);
+              const newEth = isBTC ? Number(cur.eth) : Number(cur.eth) - Number(o.quantity);
+              await pool.query('INSERT INTO balances(mode,thb,btc,eth) VALUES($1,$2,$3,$4)', ['PAPER', thb, newBtc, newEth]);
             }
           }
         }
@@ -85,22 +91,43 @@ async function loop() {
 }
 
 (async ()=>{
-  // run migrations then start
-  const fs = await import('fs');
-  const path = await import('path');
-  const client = await pool.connect();
   try {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/72a915f4-fce9-4fec-86e0-24d9a811a6e8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apps/worker/src/index.ts:93',message:'Worker starting, checking imports',data:{hasCoreQuery:typeof coreQuery==='function',hasFetchTicker:typeof fetchTicker==='function'},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    // run migrations then start
+    const fs = await import('fs');
+    const path = await import('path');
+    const client = await pool.connect();
+    try {
     const migrationsDir = path.join(process.cwd(),'migrations');
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/72a915f4-fce9-4fec-86e0-24d9a811a6e8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apps/worker/src/index.ts:95',message:'Checking migrations directory',data:{cwd:process.cwd(),migrationsDir,exists:fs.existsSync(migrationsDir)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     if (fs.existsSync(migrationsDir)) {
       const files = fs.readdirSync(migrationsDir).filter(f=>f.endsWith('.sql')).sort();
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/72a915f4-fce9-4fec-86e0-24d9a811a6e8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apps/worker/src/index.ts:97',message:'Migrations found',data:{fileCount:files.length,files},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       for (const f of files) {
         const sql = fs.readFileSync(path.join(migrationsDir,f),'utf8');
         await client.query(sql);
       }
+    } else {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/72a915f4-fce9-4fec-86e0-24d9a811a6e8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apps/worker/src/index.ts:103',message:'Migrations directory not found',data:{migrationsDir},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
     }
-  } finally {
-    client.release();
+    } finally {
+      client.release();
+    }
+    console.log('starting worker loop');
+    loop();
+  } catch (err) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/72a915f4-fce9-4fec-86e0-24d9a811a6e8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apps/worker/src/index.ts:120',message:'Worker startup failed',data:{error:String(err),stack:err instanceof Error?err.stack:undefined},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    console.error('Worker startup error:', err);
+    process.exit(1);
   }
-  console.log('starting worker loop');
-  loop();
 })();

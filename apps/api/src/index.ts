@@ -4,6 +4,7 @@ import { migrate } from './migrations';
 import { Pool } from 'pg';
 import cookie from 'fastify-cookie';
 import rateLimit from 'fastify-rate-limit';
+import fetch from 'node-fetch';
 
 dotenv.config();
 const server = Fastify({ logger: true });
@@ -51,14 +52,34 @@ server.get('/api/fills', async ()=>{
 });
 
 server.post('/api/kill', async ()=>{
-  await pool.query("INSERT INTO bot_events(level,message) VALUES('WARN','KILL_SWITCH','{}')");
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/72a915f4-fce9-4fec-86e0-24d9a811a6e8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apps/api/src/index.ts:53',message:'Kill switch called',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'E'})}).catch(()=>{});
+  // #endregion
+  await pool.query("INSERT INTO bot_events(level,message,meta) VALUES('WARN','KILL_SWITCH','{}'::jsonb)");
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/72a915f4-fce9-4fec-86e0-24d9a811a6e8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apps/api/src/index.ts:56',message:'Kill switch SQL executed',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'E'})}).catch(()=>{});
+  // #endregion
   return { ok:true };
 });
 
 const start = async ()=>{
-  await migrate();
-  const port = Number(process.env.API_PORT || 3000);
-  await server.listen({ port, host: process.env.API_HOST || '0.0.0.0' });
+  try {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/72a915f4-fce9-4fec-86e0-24d9a811a6e8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apps/api/src/index.ts:64',message:'API starting',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    await migrate();
+    const port = Number(process.env.API_PORT || 3000);
+    await server.listen({ port, host: process.env.API_HOST || '0.0.0.0' });
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/72a915f4-fce9-4fec-86e0-24d9a811a6e8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apps/api/src/index.ts:68',message:'API started successfully',data:{port},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+  } catch (err) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/72a915f4-fce9-4fec-86e0-24d9a811a6e8',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apps/api/src/index.ts:71',message:'API startup failed',data:{error:String(err),stack:err instanceof Error?err.stack:undefined},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    console.error('API startup error:', err);
+    throw err;
+  }
 };
 
 start().catch(err=>{console.error(err); process.exit(1);});
